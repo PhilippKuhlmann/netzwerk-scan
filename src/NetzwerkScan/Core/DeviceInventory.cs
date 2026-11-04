@@ -37,6 +37,7 @@ public sealed class DeviceInventory
         var ips = Devices.Select(d => d.Ip).ToHashSet();
         var seenKeys = seen.Select(s => KeyFor(s.Mac, s.Ip)).ToHashSet();
         var seenIps = seen.Select(s => s.Ip).ToHashSet();
+        var seenWithoutMac = seen.Where(s => !NeighborTable.IsRealMac(s.Mac)).Select(s => s.Ip).ToHashSet();
 
         var newIps = new HashSet<uint>();
         foreach (var device in seen)
@@ -54,6 +55,7 @@ public sealed class DeviceInventory
             .Where(d => range.Contains(d.Ip)
                         && !seenKeys.Contains(d.Key)
                         && !(d.Key.StartsWith("ip:", StringComparison.Ordinal) && seenIps.Contains(d.Ip))
+                        && !seenWithoutMac.Contains(d.Ip) // something answers there, it just can't show its MAC
                         && WasInLatestScan(d))
             .OrderBy(d => d.Ip)
             .ToList();
@@ -81,7 +83,8 @@ public sealed class DeviceInventory
         }
 
         Devices = byKey.Values.Where(d => nowUtc - d.LastSeenUtc < ForgetAfter).OrderBy(d => d.Ip).ToList();
-        Ranges.RemoveAll(r => r.First == range.First && r.Last == range.Last);
+        // Forgotten together: a range kept without its devices would make them all look new on return.
+        Ranges.RemoveAll(r => (r.First == range.First && r.Last == range.Last) || nowUtc - r.LastScanUtc >= ForgetAfter);
         Ranges.Add(new ScannedRange(range.First, range.Last, nowUtc));
     }
 
@@ -123,14 +126,25 @@ public sealed class DeviceInventory
 
     public static DeviceInventory Parse(string json)
     {
+        DeviceInventory? inventory;
         try
         {
-            return JsonSerializer.Deserialize<DeviceInventory>(json) ?? new DeviceInventory();
+            inventory = JsonSerializer.Deserialize<DeviceInventory>(json);
         }
         catch (JsonException)
         {
             return new DeviceInventory();
         }
+        if (inventory is null) return new DeviceInventory();
+
+        // Valid JSON can still be nonsense if the file was edited or damaged. Keep what is usable.
+        inventory.Devices = (inventory.Devices ?? new())
+            .Where(d => d?.Key is not null)
+            .DistinctBy(d => d.Key)
+            .Select(d => d with { Mac = d.Mac ?? "", Name = d.Name ?? "", Vendor = d.Vendor ?? "" })
+            .ToList();
+        inventory.Ranges = (inventory.Ranges ?? new()).Where(r => r is not null).ToList();
+        return inventory;
     }
 
     public string ToJson() => JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });

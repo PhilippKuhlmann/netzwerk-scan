@@ -1,9 +1,14 @@
 using System.Diagnostics;
+using System.IO;
 using System.Text.RegularExpressions;
 
 namespace NetzwerkScan.Core;
 
-/// <summary>Starts the Windows programs for connecting to a device.</summary>
+/// <summary>
+/// Starts the Windows programs for connecting to a device. Always by full path from the system folder and
+/// with that as working directory: the EXE may sit in Downloads or on a share, and Windows would otherwise
+/// prefer a "cmd.exe" or "ssh.exe" that somebody placed next to it.
+/// </summary>
 public static partial class RemoteCommands
 {
     public const int SshPort = 22;
@@ -15,7 +20,7 @@ public static partial class RemoteCommands
 
     public static ProcessStartInfo Rdp(string ip)
     {
-        var start = new ProcessStartInfo("mstsc.exe") { UseShellExecute = false };
+        var start = SystemProgram("mstsc.exe");
         start.ArgumentList.Add("/v:" + ip);
         return start;
     }
@@ -23,14 +28,22 @@ public static partial class RemoteCommands
     public static ProcessStartInfo Ssh(string ip, string user)
     {
         // Through cmd /k, so that the window stays open with the message if the connection fails.
-        var start = new ProcessStartInfo("cmd.exe") { UseShellExecute = false };
+        var start = SystemProgram("cmd.exe");
         start.ArgumentList.Add("/k");
-        start.ArgumentList.Add("ssh");
+        start.ArgumentList.Add(Path.Combine(Environment.SystemDirectory, "OpenSSH", "ssh.exe"));
         start.ArgumentList.Add(SshTarget(ip, user));
         return start;
     }
 
+    private static ProcessStartInfo SystemProgram(string name) =>
+        new(Path.Combine(Environment.SystemDirectory, name))
+        {
+            UseShellExecute = false,
+            WorkingDirectory = Environment.SystemDirectory,
+        };
+
     // Goes on a command line, so nothing else. Must not start with "-", which ssh would read as an option.
-    [GeneratedRegex(@"^[A-Za-z0-9_][A-Za-z0-9._\-]*$")]
+    // \z rather than $, which would let a trailing line break through.
+    [GeneratedRegex(@"^[A-Za-z0-9_][A-Za-z0-9._\-]*\z")]
     private static partial Regex SshUser();
 }

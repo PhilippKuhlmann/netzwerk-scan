@@ -330,10 +330,17 @@
                         </MultiTrigger>
                         <MultiDataTrigger>
                             <MultiDataTrigger.Conditions>
-                                <Condition Binding="{Binding IsRemote}" Value="True"/>
+                                <Condition Binding="{Binding IsSsh}" Value="True"/>
                                 <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="True"/>
                             </MultiDataTrigger.Conditions>
-                            <Setter TargetName="Box" Property="Background" Value="{DynamicResource RemoteBrush}"/>
+                            <Setter TargetName="Box" Property="Background" Value="{DynamicResource SshBrush}"/>
+                        </MultiDataTrigger>
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsRdp}" Value="True"/>
+                                <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource Self}}" Value="True"/>
+                            </MultiDataTrigger.Conditions>
+                            <Setter TargetName="Box" Property="Background" Value="{DynamicResource RdpBrush}"/>
                         </MultiDataTrigger>
                         <Trigger Property="IsPressed" Value="True">
                             <Setter TargetName="Box" Property="Opacity" Value="0.8"/>
@@ -348,9 +355,13 @@
                 <Setter Property="Foreground" Value="{DynamicResource AccentTextBrush}"/>
                 <Setter Property="Cursor" Value="Hand"/>
             </DataTrigger>
-            <DataTrigger Binding="{Binding IsRemote}" Value="True">
-                <Setter Property="Background" Value="{DynamicResource RemoteSoftBrush}"/>
-                <Setter Property="Foreground" Value="{DynamicResource RemoteTextBrush}"/>
+            <DataTrigger Binding="{Binding IsSsh}" Value="True">
+                <Setter Property="Background" Value="{DynamicResource SshSoftBrush}"/>
+                <Setter Property="Foreground" Value="{DynamicResource SshTextBrush}"/>
+            </DataTrigger>
+            <DataTrigger Binding="{Binding IsRdp}" Value="True">
+                <Setter Property="Background" Value="{DynamicResource RdpSoftBrush}"/>
+                <Setter Property="Foreground" Value="{DynamicResource RdpTextBrush}"/>
             </DataTrigger>
             <!-- Must come after the trigger above: it beats anything set in the template. -->
             <MultiTrigger>

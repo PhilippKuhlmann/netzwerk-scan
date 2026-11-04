@@ -28,6 +28,28 @@ public class CsvExportTests
     public void DefusesFormulasFromDeviceNames(string value, string expected) =>
         Assert.Equal(expected, CsvExport.Cell(value));
 
+    [Theory]
+    [InlineData(" =1+1")]
+    [InlineData("\n=1+1")]
+    [InlineData(" =1+1")]
+    [InlineData("　=1+1")]
+    [InlineData("​=1+1")]
+    [InlineData("﻿=1+1")]
+    [InlineData("\0=1+1")]
+    [InlineData("＝1+1")]
+    [InlineData("＋1")]
+    [InlineData("－1")]
+    [InlineData("＠SUM(A1)")]
+    [InlineData("\tText")]
+    public void InvisibleCharactersAndFullWidthFormsDontGetAroundIt(string value) =>
+        Assert.StartsWith("\"'", CsvExport.Cell(value));
+
+    [Theory]
+    [InlineData("A=B")]
+    [InlineData("Foo-Bar")]
+    [InlineData("  Text")]
+    public void HarmlessTextStaysAsItIs(string value) => Assert.False(CsvExport.Cell(value).StartsWith("\"'"));
+
     [Fact]
     public void LineBreaksStayInOneRow() => Assert.Equal("\"a b\"", CsvExport.Cell("a\r\nb"));
 
@@ -191,11 +213,60 @@ public class DeviceInventoryTests
         Assert.Equal(MacB, Assert.Single(loaded.Compare(Range, new[] { Seen(A, MacA) }).Missing).Mac);
     }
 
+    [Fact]
+    public void DeviceThatAnswersWithoutItsMacIsNotMissing()
+    {
+        var inventory = new DeviceInventory();
+        inventory.Record(Range, new[] { Seen(A, MacA), Seen(B, MacB) }, T1);
+
+        var result = inventory.Compare(Range, new[] { Seen(A), Seen(B) });
+
+        Assert.Empty(result.NewIps);
+        Assert.Empty(result.Missing);
+    }
+
+    [Fact]
+    public void ReturningToALongForgottenRangeIsAFirstLook()
+    {
+        var other = new IpRange(0xC6336401, 0xC63364FE);
+        var inventory = new DeviceInventory();
+        inventory.Record(Range, new[] { Seen(A, MacA) }, T1);
+        inventory.Record(other, new[] { Seen(0xC6336401, MacB) }, T1.AddDays(200));
+
+        var result = inventory.Compare(Range, new[] { Seen(A, MacA) });
+
+        Assert.Empty(result.NewIps);
+        Assert.False(result.HadHistory);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("kaputt")]
     [InlineData("null")]
     public void DamagedFileStartsEmpty(string json) => Assert.Empty(DeviceInventory.Parse(json).Devices);
+
+    [Theory]
+    [InlineData("{\"Devices\":null,\"Ranges\":null}")]
+    [InlineData("{\"Devices\":[null],\"Ranges\":[null]}")]
+    [InlineData("{\"Devices\":[{\"Ip\":1}]}")]
+    public void NonsenseContentCantBreakAScan(string json)
+    {
+        var inventory = DeviceInventory.Parse(json);
+
+        Assert.Empty(inventory.Compare(Range, new[] { Seen(A, MacA) }).NewIps);
+        inventory.Record(Range, new[] { Seen(A, MacA) }, T1);
+        Assert.Single(inventory.Devices);
+    }
+
+    [Fact]
+    public void DuplicateKeysInTheFileCantBreakAScan()
+    {
+        const string device = "{\"Key\":\"00:00:5E:00:53:01\",\"Ip\":1,\"Mac\":\"00:00:5E:00:53:01\"}";
+        var inventory = DeviceInventory.Parse("{\"Devices\":[" + device + "," + device + "]}");
+
+        inventory.Record(Range, new[] { Seen(A, MacA) }, T1);
+        Assert.Single(inventory.Devices);
+    }
 
     [Theory]
     [InlineData(2, 1, true, true, "Seit dem letzten Scan: 2 Geräte neu, 1 verschwunden")]
@@ -214,7 +285,8 @@ public class RemoteCommandTests
     public void RdpTargetsTheHost()
     {
         var start = RemoteCommands.Rdp("192.0.2.1");
-        Assert.Equal("mstsc.exe", start.FileName);
+        Assert.Equal(Path.Combine(Environment.SystemDirectory, "mstsc.exe"), start.FileName);
+        Assert.Equal(Environment.SystemDirectory, start.WorkingDirectory);
         Assert.Equal(new[] { "/v:192.0.2.1" }, start.ArgumentList);
     }
 
@@ -225,8 +297,9 @@ public class RemoteCommandTests
     public void SshUsesTheUserIfThereIsOne(string user, string target)
     {
         var start = RemoteCommands.Ssh("192.0.2.1", user);
-        Assert.Equal("cmd.exe", start.FileName);
-        Assert.Equal(new[] { "/k", "ssh", target }, start.ArgumentList);
+        Assert.Equal(Path.Combine(Environment.SystemDirectory, "cmd.exe"), start.FileName);
+        Assert.Equal(Environment.SystemDirectory, start.WorkingDirectory);
+        Assert.Equal(new[] { "/k", Path.Combine(Environment.SystemDirectory, "OpenSSH", "ssh.exe"), target }, start.ArgumentList);
     }
 
     [Theory]
@@ -236,6 +309,7 @@ public class RemoteCommandTests
     [InlineData("a|b")]
     [InlineData("a\"b")]
     [InlineData("a@b")]
+    [InlineData("root\n")]
     public void UnsafeUserNameNeverReachesTheCommandLine(string user)
     {
         Assert.False(RemoteCommands.IsValidSshUser(user));
@@ -254,7 +328,8 @@ public class PortViewModelTests
     {
         var vm = Port(port);
         Assert.True(vm.IsClickable);
-        Assert.True(vm.IsRemote);
+        Assert.Equal(port == 22, vm.IsSsh);
+        Assert.Equal(port == 3389, vm.IsRdp);
         Assert.False(vm.IsWeb);
         Assert.EndsWith("↗", vm.ChipText);
     }
@@ -267,7 +342,8 @@ public class PortViewModelTests
 
         vm.SetWeb(new WebInfo("https", "Proxmox", null));
         Assert.True(vm.IsClickable);
-        Assert.False(vm.IsRemote);
+        Assert.False(vm.IsSsh);
+        Assert.False(vm.IsRdp);
         Assert.Equal("https://192.0.2.1:8006/", vm.Url);
     }
 
@@ -373,6 +449,31 @@ public class AppUpdaterTests
         }
         finally
         {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void ReplaceFileCopesWithReadOnlyFilesAndALeftoverBackup()
+    {
+        var dir = Directory.CreateTempSubdirectory().FullName;
+        try
+        {
+            var (exe, fresh, old) = (Path.Combine(dir, "a.exe"), Path.Combine(dir, "a.exe.new"), Path.Combine(dir, "a.exe.old"));
+            File.WriteAllText(exe, "alt");
+            File.WriteAllText(fresh, "neu");
+            File.WriteAllText(old, "uralt");
+            File.SetAttributes(exe, FileAttributes.ReadOnly);
+            File.SetAttributes(old, FileAttributes.ReadOnly);
+
+            AppUpdater.ReplaceFile(exe, fresh, old);
+
+            Assert.Equal("neu", File.ReadAllText(exe));
+            Assert.Equal("alt", File.ReadAllText(old));
+        }
+        finally
+        {
+            foreach (var file in Directory.GetFiles(dir)) File.SetAttributes(file, FileAttributes.Normal);
             Directory.Delete(dir, true);
         }
     }

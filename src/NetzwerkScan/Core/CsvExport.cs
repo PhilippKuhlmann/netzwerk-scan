@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 
 namespace NetzwerkScan.Core;
@@ -31,11 +32,15 @@ public static class CsvExport
     /// <summary>
     /// Names and page titles come from the devices on the network, so they can't be trusted. Excel would
     /// run a cell starting with "=" as a formula, hence the leading apostrophe, which makes it plain text.
+    /// Invisible characters in front of it and the full-width forms must not get around that.
     /// </summary>
     public static string Cell(string value)
     {
         var text = value.ReplaceLineEndings(" ");
-        if (text.Length > 0 && "=+-@\t\r".Contains(text[0])) text = "'" + text;
+        var firstVisible = text.FirstOrDefault(c =>
+            !char.IsWhiteSpace(c) && !char.IsControl(c) && char.GetUnicodeCategory(c) != UnicodeCategory.Format);
+
+        if (text.Length > 0 && (text[0] == '\t' || "=+-@＝＋－＠".Contains(firstVisible))) text = "'" + text;
         return "\"" + text.Replace("\"", "\"\"") + "\"";
     }
 }

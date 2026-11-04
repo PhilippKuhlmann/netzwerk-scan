@@ -28,10 +28,16 @@ public partial class MainWindow : Window
         _ = AppUpdater.CleanUpAsync();
         if (await AppUpdater.CheckAsync() is not { } update) return;
 
-        // Don't pull the rug out from under a scan that was started in the meantime.
-        if (_viewModel.IsScanning)
+        // The check can take a moment. Whatever was started in the meantime must not get lost to a restart.
+        if (_viewModel.IsScanning || _viewModel.Hosts.Count > 0 || OwnedWindows.Count > 0)
         {
             _viewModel.ShowNotice($"Update auf Version {update.Version} wird beim nächsten Start installiert.");
+            return;
+        }
+
+        if (AppUpdater.FindInstallObstacle() is { } obstacle)
+        {
+            _viewModel.ShowNotice($"Update auf Version {update.Version} ist verfügbar, aber nicht möglich: {obstacle}");
             return;
         }
 
@@ -40,8 +46,15 @@ public partial class MainWindow : Window
 
         if (dialog.Installed)
         {
-            AppUpdater.Restart();
-            Application.Current.Shutdown();
+            try
+            {
+                AppUpdater.RestartOrRollBack();
+                Application.Current.Shutdown();
+            }
+            catch (UpdateException e)
+            {
+                _viewModel.ShowNotice(e.Message);
+            }
         }
         else if (dialog.Error is not null)
         {

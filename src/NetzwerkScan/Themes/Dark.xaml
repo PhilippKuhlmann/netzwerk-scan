@@ -16,9 +16,12 @@
     <SolidColorBrush x:Key="AccentSoftBrush" Color="#1E3050"/>
     <SolidColorBrush x:Key="AccentSofterBrush" Color="#222A37"/>
     <SolidColorBrush x:Key="SelectedRowBrush" Color="#2A4370"/>
-    <SolidColorBrush x:Key="RemoteBrush" Color="#7446D6"/>
-    <SolidColorBrush x:Key="RemoteSoftBrush" Color="#3A2A5E"/>
-    <SolidColorBrush x:Key="RemoteTextBrush" Color="#D6C4FF"/>
+    <SolidColorBrush x:Key="SshBrush" Color="#7446D6"/>
+    <SolidColorBrush x:Key="SshSoftBrush" Color="#3A2A5E"/>
+    <SolidColorBrush x:Key="SshTextBrush" Color="#D6C4FF"/>
+    <SolidColorBrush x:Key="RdpBrush" Color="#B4530A"/>
+    <SolidColorBrush x:Key="RdpSoftBrush" Color="#4D3014"/>
+    <SolidColorBrush x:Key="RdpTextBrush" Color="#FFCB94"/>
     <SolidColorBrush x:Key="NewBadgeBrush" Color="#1B3F2B"/>
     <SolidColorBrush x:Key="NewBadgeTextBrush" Color="#9AE6B8"/>
     <SolidColorBrush x:Key="ChipBrush" Color="#2B3037"/>

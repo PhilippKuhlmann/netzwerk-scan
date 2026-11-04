@@ -14,7 +14,7 @@ Sie läuft ohne Installation und ohne Adminrechte auf Windows 10 und 11 (x64). D
 - **Geräte finden:** per Ping, TCP und ARP-Tabelle, damit auch Geräte auftauchen, die nicht auf Ping antworten. Mit Namen, MAC-Adresse und Hersteller (IEEE-Liste, offline enthalten).
 - **Per Klick öffnen:** Weboberflächen im Browser (HTTP oder HTTPS wird erkannt, zum Beispiel Proxmox auf Port 8006), Remotedesktop auf Port 3389 und SSH auf Port 22.
 - **Windows-Freigaben:** anzeigen, im Explorer öffnen, bei Bedarf mit einem Benutzerkonto anmelden.
-- **Änderungen erkennen:** zeigt, welche Geräte seit dem letzten Scan neu oder verschwunden sind. Die Daten bleiben auf dem eigenen PC.
+- **Änderungen erkennen:** zeigt, welche Geräte seit dem letzten Scan neu oder verschwunden sind. Die Daten bleiben auf dem eigenen PC. Geräte werden an der MAC-Adresse erkannt, gleich nummerierte Netze an verschiedenen Standorten gelten dabei als ein Netz.
 - **Export:** Ergebnis als CSV-Datei speichern, passend für Excel.
 - **Einstellungen:** Ports zum Abhaken mit Erklärung, Timeout, SSH-Benutzer, helles oder dunkles Design.
 
@@ -40,7 +40,7 @@ dotnet test -c Release
 dotnet publish src/NetzwerkScan -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -p:DebugType=none -o dist
 ```
 
-Selbst gebaute Versionen außerhalb dieses Publish-Befehls aktualisieren sich nicht automatisch.
+Nur so gebaute Single-File-Versionen aktualisieren sich automatisch, und nur wenn ihr Ordner beschreibbar ist und keine zweite Kopie von dort läuft.
 
 ## Neue Version veröffentlichen
 

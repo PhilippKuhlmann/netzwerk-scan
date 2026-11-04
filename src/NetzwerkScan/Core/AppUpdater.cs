@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
@@ -136,6 +137,8 @@ public static partial class AppUpdater
                 throw new UpdateException("Die heruntergeladene Datei hat nicht die erwartete Version.");
             }
 
+            // "Überspringen" may have come in during the last step. From here on it is too late for that.
+            ct.ThrowIfCancellationRequested();
             ReplaceFile(exe, newFile, oldFile);
         }
         catch (Exception e) when (e is HttpRequestException or IOException or UnauthorizedAccessException or InvalidOperationException)
@@ -143,6 +146,11 @@ public static partial class AppUpdater
             TryDelete(newFile);
             throw new UpdateException($"Update fehlgeschlagen: {e.Message}", e);
         }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            TryDelete(newFile);
+            throw new UpdateException("Das Update konnte nicht geladen werden: Zeitüberschreitung.");
+        }
         catch
         {
             TryDelete(newFile);
@@ -150,24 +158,76 @@ public static partial class AppUpdater
         }
     }
 
-    /// <summary>A running EXE can't be overwritten, but it can be renamed. Goes back if the second step fails.</summary>
+    /// <summary>
+    /// Swaps the files in one step, keeping the running EXE as backup. Two separate moves could end with no
+    /// EXE at all, for example if a virus scanner blocks the second one and then the way back.
+    /// </summary>
     public static void ReplaceFile(string exe, string newFile, string oldFile)
     {
-        File.Move(exe, oldFile, overwrite: true);
+        ClearReadOnly(exe);
+        ClearReadOnly(oldFile);
+        File.Replace(newFile, exe, oldFile, ignoreMetadataErrors: true);
+    }
+
+    /// <summary>Starts the new version. If that fails, for example because a virus scanner took it, the old one goes back.</summary>
+    public static void RestartOrRollBack()
+    {
+        var exe = InstallPath!;
         try
         {
-            File.Move(newFile, exe);
+            Process.Start(new ProcessStartInfo(exe) { UseShellExecute = false });
         }
-        catch
+        catch (Exception e) when (e is Win32Exception or IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            File.Move(oldFile, exe);
-            throw;
+            try
+            {
+                File.Move(exe + ".old", exe, overwrite: true);
+            }
+            catch (Exception restore) when (restore is IOException or UnauthorizedAccessException)
+            {
+                throw new UpdateException($"Die neue Version startet nicht, und die alte konnte nicht zurückkommen. Sie liegt als {exe}.old daneben.", restore);
+            }
+            throw new UpdateException("Die neue Version konnte nicht gestartet werden. Die bisherige bleibt installiert.", e);
         }
     }
 
-    public static void Restart()
+    /// <summary>Says why installing here won't work, if it won't. Checked first, to save the download.</summary>
+    public static string? FindInstallObstacle()
     {
-        Process.Start(new ProcessStartInfo(InstallPath!) { UseShellExecute = false });
+        if (InstallPath is not { } exe) return "Diese Version kann sich nicht selbst aktualisieren.";
+
+        try
+        {
+            using (File.Create(exe + ".new")) { }
+            File.Delete(exe + ".new");
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return "Der Ordner der Anwendung ist schreibgeschützt.";
+        }
+
+        // A running copy loads parts of itself from the EXE on demand and would break after the swap.
+        return IsAnotherInstanceRunning(exe) ? "Die Anwendung läuft noch in einem anderen Fenster." : null;
+    }
+
+    private static bool IsAnotherInstanceRunning(string exe)
+    {
+        foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(exe)))
+        {
+            using (process)
+            {
+                if (process.Id == Environment.ProcessId) continue;
+                try
+                {
+                    if (string.Equals(process.MainModule?.FileName, exe, StringComparison.OrdinalIgnoreCase)) return true;
+                }
+                catch (Exception e) when (e is Win32Exception or InvalidOperationException)
+                {
+                    // Exited in the meantime, or belongs to another user and so isn't running from here for us.
+                }
+            }
+        }
+        return false;
     }
 
     /// <summary>Removes what the previous version left behind. It may still be shutting down for a moment.</summary>
@@ -224,6 +284,10 @@ public static partial class AppUpdater
         {
             throw new UpdateException("Der Download des Updates ist hängen geblieben.");
         }
+
+        // All the way to the disk: a power cut right after the swap must not leave a damaged EXE.
+        await target.FlushAsync(ct);
+        target.Flush(flushToDisk: true);
         return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
     }
 
@@ -234,10 +298,20 @@ public static partial class AppUpdater
         return request;
     }
 
+    /// <summary>A read-only leftover would otherwise block every later update.</summary>
+    private static void ClearReadOnly(string path)
+    {
+        if (File.Exists(path) && File.GetAttributes(path).HasFlag(FileAttributes.ReadOnly))
+        {
+            File.SetAttributes(path, File.GetAttributes(path) & ~FileAttributes.ReadOnly);
+        }
+    }
+
     private static void TryDelete(string path)
     {
         try
         {
+            ClearReadOnly(path);
             File.Delete(path);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)

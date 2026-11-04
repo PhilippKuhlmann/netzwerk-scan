@@ -272,7 +272,7 @@
                                 </DataGridTemplateColumn.CellTemplate>
                             </DataGridTemplateColumn>
                             <DataGridTextColumn Header="Ping" Binding="{Binding PingText}" Width="68"/>
-                            <DataGridTemplateColumn Header="Ports (blau = Browser, lila = SSH/RDP)" Width="*" SortMemberPath="Ports.Count">
+                            <DataGridTemplateColumn Header="Ports (blau Web, lila SSH, orange RDP)" Width="*" SortMemberPath="Ports.Count">
                                 <DataGridTemplateColumn.CellTemplate>
                                     <DataTemplate>
                                         <ItemsControl ItemsSource="{Binding Ports}" ItemsPanel="{StaticResource WrapItems}"

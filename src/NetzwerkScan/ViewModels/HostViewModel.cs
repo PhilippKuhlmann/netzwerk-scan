@@ -25,8 +25,9 @@ public sealed class PortViewModel : ObservableObject
     public ICommand OpenCommand { get; }
 
     public bool IsWeb => _web is not null;
-    public bool IsRemote => !IsWeb && Port is RemoteCommands.RdpPort or RemoteCommands.SshPort;
-    public bool IsClickable => IsWeb || IsRemote;
+    public bool IsSsh => !IsWeb && Port == RemoteCommands.SshPort;
+    public bool IsRdp => !IsWeb && Port == RemoteCommands.RdpPort;
+    public bool IsClickable => IsWeb || IsSsh || IsRdp;
 
     public string Url
     {
@@ -75,7 +76,8 @@ public sealed class PortViewModel : ObservableObject
     {
         _web = info;
         Raise(nameof(IsWeb));
-        Raise(nameof(IsRemote));
+        Raise(nameof(IsSsh));
+        Raise(nameof(IsRdp));
         Raise(nameof(IsClickable));
         Raise(nameof(Url));
         Raise(nameof(ChipText));
