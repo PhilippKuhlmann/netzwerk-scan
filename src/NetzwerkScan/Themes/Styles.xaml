@@ -374,6 +374,32 @@
         </Style.Triggers>
     </Style>
 
+    <!-- A device gone since the previous scan. Clicking it sends a Wake-on-LAN packet. -->
+    <Style x:Key="MissingChip" TargetType="Button">
+        <Setter Property="Margin" Value="0,4,4,0"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Box" Background="{DynamicResource ChipBrush}" BorderBrush="Transparent"
+                            BorderThickness="1" CornerRadius="4" Padding="7,2">
+                        <ContentPresenter VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+            <Trigger Property="IsEnabled" Value="True">
+                <Setter Property="Cursor" Value="Hand"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
     <DataTemplate x:Key="PortChipTemplate">
         <Button Style="{StaticResource PortChip}" Content="{Binding ChipText}" Command="{Binding OpenCommand}"
                 IsEnabled="{Binding IsClickable}" ToolTip="{Binding ToolTipText}"/>

@@ -67,6 +67,7 @@ public sealed class MainViewModel : ObservableObject
     private string _sshUser = "";
     private string _changeSummary = "";
     private bool _customNamesChanged;
+    private string _wakeStatus = "";
 
     public MainViewModel(AppSettings settings)
     {
@@ -343,6 +344,26 @@ public sealed class MainViewModel : ObservableObject
         _inventory.Save();
     }
 
+    public string WakeStatus { get => _wakeStatus; private set => Set(ref _wakeStatus, value); }
+
+    /// <summary>Known devices that can't be reached right now. This PC and whatever the last scan found are awake already.</summary>
+    public IReadOnlyList<MissingDeviceViewModel> LoadWakeCandidates()
+    {
+        WakeStatus = "";
+        var awake = Hosts.Select(h => h.Mac).Concat(NetworkAdapters.List().Select(a => a.Mac)).ToHashSet();
+        return _inventory.WakeCandidates(awake)
+            .Select(d => new MissingDeviceViewModel(d, _inventory.CustomNameFor(d.Mac, d.Ip), Wake))
+            .ToList();
+    }
+
+    private async void Wake(MissingDeviceViewModel device)
+    {
+        var name = device.Label.Length > 0 ? device.Label : device.Ip;
+        var result = await WakeOnLan.SendAsync(device.Mac, device.IpKey, NetworkAdapters.List());
+        WakeStatus = WakeOnLan.Describe(result, name);
+        StatusText = WakeStatus;
+    }
+
     public string Search
     {
         get => _search;
@@ -459,7 +480,7 @@ public sealed class MainViewModel : ObservableObject
 
     private void CompareWithEarlierScans(IpRangeSet range, bool completed)
     {
-        var seen = Hosts.Select(h => new SeenDevice(h.IpKey, h.Mac, h.Name, h.Vendor)).ToList();
+        var seen = Hosts.Select(h => new SeenDevice(h.IpKey, h.Mac, h.InventoryName, h.Vendor)).ToList();
         var comparison = _inventory.Compare(range, seen);
 
         foreach (var host in Hosts) host.IsNew = comparison.NewIps.Contains(host.IpKey);
@@ -467,7 +488,7 @@ public sealed class MainViewModel : ObservableObject
         if (completed)
         {
             // Only a finished scan can tell that a device is really gone.
-            foreach (var device in comparison.Missing) MissingDevices.Add(new MissingDeviceViewModel(device, _inventory.CustomNameFor(device.Mac, device.Ip)));
+            foreach (var device in comparison.Missing) MissingDevices.Add(new MissingDeviceViewModel(device, _inventory.CustomNameFor(device.Mac, device.Ip), Wake));
             _inventory.Record(range, seen, DateTime.UtcNow);
             _inventory.Save();
         }
@@ -534,6 +555,9 @@ public sealed class MainViewModel : ObservableObject
             case HostNameEvent name:
                 if (name.Name is not null) host.Name = name.Name;
                 if (name.Workgroup is not null) host.Workgroup = name.Workgroup;
+                break;
+            case HostAnnouncedEvent announced:
+                host.Announce(announced.Name, announced.Model);
                 break;
             case PortOpenEvent port:
                 host.AddPort(port.Port);

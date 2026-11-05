@@ -11,8 +11,9 @@ Sie läuft ohne Installation und ohne Adminrechte auf Windows 10 und 11 (x64). D
 
 - **Netzwerk wählen:** Netzwerkkarte auswählen, der Scan startet sofort. Oder einen oder mehrere eigene Bereiche eingeben (`192.168.1.0/24, 10.0.0.1-50`). Die letzte Auswahl bleibt gespeichert.
 - **Übersicht:** belegte und freie Adressen, Geräte mit offenen Ports, Weboberflächen und Freigaben.
-- **Geräte finden:** per Ping, TCP und ARP-Tabelle, damit auch Geräte auftauchen, die nicht auf Ping antworten. Mit Namen, MAC-Adresse und Hersteller (IEEE-Liste, offline enthalten). Geräten ohne Namen kannst du selbst einen geben.
+- **Geräte finden:** per Ping, TCP und ARP-Tabelle, damit auch Geräte auftauchen, die nicht auf Ping antworten. Mit MAC-Adresse, Hersteller (IEEE-Liste, offline enthalten) und Namen aus DNS, NetBIOS, mDNS und UPnP. Geräten ohne Namen kannst du selbst einen geben.
 - **Per Klick öffnen:** Weboberflächen im Browser (HTTP oder HTTPS wird erkannt, zum Beispiel Proxmox auf Port 8006), Remotedesktop auf Port 3389 und SSH auf Port 22.
+- **Aufwecken:** bekannte Geräte, die gerade aus sind, per Wake-on-LAN starten. Das Gerät muss es unterstützen und im selben Netz wie der PC liegen.
 - **Windows-Freigaben:** anzeigen, im Explorer öffnen, bei Bedarf mit einem Benutzerkonto anmelden.
 - **Änderungen erkennen:** zeigt, welche Geräte seit dem letzten Scan neu oder verschwunden sind. Die Daten bleiben auf dem eigenen PC. Geräte werden an der MAC-Adresse erkannt, gleich nummerierte Netze an verschiedenen Standorten gelten dabei als ein Netz.
 - **Export:** Ergebnis als CSV-Datei speichern, passend für Excel.

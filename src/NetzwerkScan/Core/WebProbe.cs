@@ -73,6 +73,12 @@ public static partial class WebProbe
         return new RedirectTarget(target.Scheme == Uri.UriSchemeHttps, target.Port, target.PathAndQuery);
     }
 
+    /// <summary>A device can name any address. It only gets fetched if that is the device itself, on a port that may be probed.</summary>
+    public static Task<string?> FetchFromSameDeviceAsync(IPAddress address, string location, CancellationToken ct) =>
+        ResolveRedirect(location, address, 80, useTls: false) is { } target
+            ? FetchAsync(address, target.Port, target.UseTls, target.Path, ct)
+            : Task.FromResult<string?>(null);
+
     private static async Task<string?> FetchAsync(IPAddress address, int port, bool useTls, string path, CancellationToken ct)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);

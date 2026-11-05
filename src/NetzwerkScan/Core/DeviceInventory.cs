@@ -51,6 +51,13 @@ public sealed class DeviceInventory
 
     private static string IpKey(uint ip) => "ip:" + Ipv4.ToText(ip);
 
+    /// <summary>
+    /// Known devices that could be woken up. Unlike Compare's list of missing devices this includes those
+    /// asleep for longer than one scan, which is the normal case for something only used now and then.
+    /// </summary>
+    public IEnumerable<KnownDevice> WakeCandidates(IReadOnlySet<string> onlineMacs) =>
+        Devices.Where(d => NeighborTable.IsRealMac(d.Mac) && !onlineMacs.Contains(d.Mac)).OrderBy(d => d.Ip);
+
     public ScanComparison Compare(IpRangeSet range, IReadOnlyCollection<SeenDevice> seen)
     {
         var keys = Devices.Select(d => d.Key).ToHashSet();

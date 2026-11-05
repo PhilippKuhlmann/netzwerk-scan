@@ -105,6 +105,9 @@ public partial class MainWindow : Window
     private void Settings_Click(object sender, RoutedEventArgs e) =>
         new SettingsWindow(_viewModel) { Owner = this }.ShowDialog();
 
+    private void Wake_Click(object sender, RoutedEventArgs e) =>
+        new WakeWindow(_viewModel) { Owner = this }.ShowDialog();
+
     private void CopyIp_Click(object sender, RoutedEventArgs e)
     {
         if (_viewModel.SelectedHost is not { } host) return;

@@ -1,0 +1,45 @@
+<Window x:Class="NetzwerkScan.WakeWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Gerät aufwecken" Width="520" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        Background="{DynamicResource CardBrush}" FontFamily="Segoe UI" FontSize="13"
+        Foreground="{DynamicResource TextBrush}" UseLayoutRounding="True">
+    <StackPanel Margin="18,16">
+        <TextBlock Style="{StaticResource MutedText}" TextWrapping="Wrap" Margin="0,0,0,12"
+                   Text="Bekannte Geräte, die der letzte Scan nicht gefunden hat. Wake-on-LAN muss auf dem Gerät eingeschaltet sein, und es muss im selben Netz wie dieser PC liegen."/>
+
+        <TextBlock x:Name="EmptyHint" Style="{StaticResource MutedText}" TextWrapping="Wrap" Visibility="Collapsed"
+                   Text="Keine Geräte zum Aufwecken. Ein Gerät wird bekannt, sobald ein Scan es mit MAC-Adresse gefunden hat."
+                   AutomationProperties.AutomationId="WakeEmptyHint"/>
+
+        <ScrollViewer MaxHeight="360" VerticalScrollBarVisibility="Auto" Focusable="False">
+            <ItemsControl x:Name="DeviceList" Focusable="False" AutomationProperties.AutomationId="WakeList">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="0,0,6,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,10,0">
+                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
+                                <TextBlock Style="{StaticResource MutedText}" Text="{Binding Detail}" TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <Button Grid.Column="1" Style="{StaticResource SecondaryButton}" Content="Aufwecken"
+                                    VerticalAlignment="Center" Command="{Binding WakeCommand}"
+                                    AutomationProperties.Name="{Binding Text, StringFormat=Aufwecken: {0}}"/>
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <TextBlock Text="{Binding WakeStatus}" TextWrapping="Wrap" Margin="0,6,0,0"
+                   Visibility="{Binding WakeStatus, Converter={StaticResource NullToCollapsed}}"
+                   AutomationProperties.AutomationId="WakeStatus"/>
+
+        <Button Style="{StaticResource SecondaryButton}" Content="Schließen" IsCancel="True" IsDefault="True"
+                HorizontalAlignment="Right" Padding="14,6" Margin="0,14,0,0"/>
+    </StackPanel>
+</Window>

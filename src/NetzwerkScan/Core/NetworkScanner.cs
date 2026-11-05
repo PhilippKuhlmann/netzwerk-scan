@@ -11,6 +11,7 @@ public abstract record ScanEvent(uint Ip);
 public sealed record HostFoundEvent(uint Ip, long? PingMs, bool IsThisPc) : ScanEvent(Ip);
 public sealed record HostMacEvent(uint Ip, string Mac) : ScanEvent(Ip);
 public sealed record HostNameEvent(uint Ip, string? Name, string? Workgroup) : ScanEvent(Ip);
+public sealed record HostAnnouncedEvent(uint Ip, string Name, string Model) : ScanEvent(Ip);
 public sealed record PortOpenEvent(uint Ip, int Port) : ScanEvent(Ip);
 public sealed record PortWebEvent(uint Ip, int Port, WebInfo Info) : ScanEvent(Ip);
 public sealed record SharesEvent(uint Ip, ShareResult Result) : ScanEvent(Ip);
@@ -53,6 +54,23 @@ public sealed class NetworkScanner
         var adapters = NetworkAdapters.List();
         var localIps = adapters.Select(a => a.Address).ToHashSet();
 
+        // Runs alongside the scan and rarely adds to its duration. Reported last, when all hosts are known.
+        var announcing = LocalDiscovery.RunAsync(adapters, options.Range, ct);
+        try
+        {
+            await ScanAsync(options, adapters, localIps, events, ct);
+        }
+        finally
+        {
+            foreach (var (ip, announcement) in await announcing)
+            {
+                if (_alive.ContainsKey(ip)) events.Report(new HostAnnouncedEvent(ip, announcement.Name, announcement.Model));
+            }
+        }
+    }
+
+    private async Task ScanAsync(ScanOptions options, List<AdapterInfo> adapters, HashSet<uint> localIps, IProgress<ScanEvent> events, CancellationToken ct)
+    {
         try
         {
             await Parallel.ForEachAsync(options.Range.Addresses(),
@@ -259,11 +277,13 @@ public sealed class NetworkScanner
     {
         var dnsName = ReverseDnsAsync(address, ct);
         var netBios = NetBios.QueryAsync(address, ct);
+        var mdnsName = Mdns.ReverseLookupAsync(address, ct);
 
         var name = await dnsName;
         var info = await netBios;
+        var localName = await mdnsName;
 
-        name ??= info?.Name;
+        name ??= info?.Name ?? localName;
         if (isThisPc) name ??= Environment.MachineName;
 
         if (name is not null || info?.Workgroup is not null)

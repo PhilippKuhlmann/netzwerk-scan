@@ -135,6 +135,8 @@ public sealed class HostViewModel : ObservableObject
     private bool _isScanning = true;
     private bool _isNew;
     private string _customName = "";
+    private string _announcedName = "";
+    private string _model = "";
     private readonly Func<string> _sshUser;
     private readonly Action<HostViewModel>? _customNameChanged;
 
@@ -160,7 +162,38 @@ public sealed class HostViewModel : ObservableObject
     public ObservableCollection<PortViewModel> WebPorts { get; } = new();
     public ObservableCollection<ShareViewModel> Shares { get; } = new();
 
-    public string Name { get => _name; set { if (Set(ref _name, value)) Raise(nameof(DisplayName)); } }
+    public string Name
+    {
+        get => _name;
+        set
+        {
+            if (!Set(ref _name, value)) return;
+            Raise(nameof(DisplayName));
+            Raise(nameof(AnnouncedText));
+        }
+    }
+
+    /// <summary>What the device says about itself over mDNS or UPnP.</summary>
+    public void Announce(string name, string model)
+    {
+        _announcedName = name;
+        _model = model;
+        Raise(nameof(DisplayName));
+        Raise(nameof(AnnouncedText));
+    }
+
+    public string AnnouncedText
+    {
+        get
+        {
+            var name = _announcedName.Equals(_name.Split('.')[0], StringComparison.OrdinalIgnoreCase) ? "" : _announcedName;
+            var parts = new[] { name, _model }.Where(s => s.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            return parts.Count > 0 ? "Meldet sich als: " + string.Join(" · ", parts) : "";
+        }
+    }
+
+    /// <summary>What a device is remembered as once it is gone.</summary>
+    public string InventoryName => _name.Length > 0 ? _name : _announcedName;
 
     /// <summary>The name the user gave this device. Typed into directly, so it can have a trailing space for a moment.</summary>
     public string CustomName
@@ -181,11 +214,13 @@ public sealed class HostViewModel : ObservableObject
 
     /// <summary>
     /// The user's own name, otherwise the host name without the domain, which would only repeat in every row.
-    /// The details show the full name.
+    /// The details show the full name. A name from DNS may have been chosen by the admin, so it goes before
+    /// the one the device announces.
     /// </summary>
     public string DisplayName =>
         _customName.Trim() is { Length: > 0 } custom ? custom
         : _name.Length > 0 ? _name.Split('.')[0]
+        : _announcedName.Length > 0 ? _announcedName
         : IsThisPc ? "Dieser PC"
         : "";
 
@@ -272,6 +307,8 @@ public sealed class HostViewModel : ObservableObject
         || Ip.Contains(search, StringComparison.OrdinalIgnoreCase)
         || _name.Contains(search, StringComparison.OrdinalIgnoreCase)
         || _customName.Contains(search, StringComparison.OrdinalIgnoreCase)
+        || _announcedName.Contains(search, StringComparison.OrdinalIgnoreCase)
+        || _model.Contains(search, StringComparison.OrdinalIgnoreCase)
         || _mac.Contains(search, StringComparison.OrdinalIgnoreCase)
         || _vendor.Contains(search, StringComparison.OrdinalIgnoreCase)
         || Ports.Any(p => p.ChipText.Contains(search, StringComparison.OrdinalIgnoreCase)

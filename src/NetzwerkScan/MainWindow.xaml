@@ -163,10 +163,16 @@
                         </Grid.ColumnDefinitions>
                         <TextBox x:Name="SearchBox" Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}"
                                  AutomationProperties.Name="Suchen"/>
-                        <Button Grid.Column="1" Style="{StaticResource SecondaryButton}" Content="Exportieren" Margin="8,0,0,0"
-                                FontSize="13" Padding="12,4" Click="Export_Click" IsEnabled="{Binding CanExport}"
-                                ToolTip="Ergebnis als CSV-Datei speichern, zum Beispiel für Excel"
-                                AutomationProperties.AutomationId="ExportButton"/>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <Button Style="{StaticResource SecondaryButton}" Content="Aufwecken…" Margin="8,0,0,0"
+                                    FontSize="13" Padding="12,4" Click="Wake_Click"
+                                    ToolTip="Bekannte Geräte, die gerade aus sind, per Wake-on-LAN starten"
+                                    AutomationProperties.AutomationId="WakeButton"/>
+                            <Button Style="{StaticResource SecondaryButton}" Content="Exportieren" Margin="8,0,0,0"
+                                    FontSize="13" Padding="12,4" Click="Export_Click" IsEnabled="{Binding CanExport}"
+                                    ToolTip="Ergebnis als CSV-Datei speichern, zum Beispiel für Excel"
+                                    AutomationProperties.AutomationId="ExportButton"/>
+                        </StackPanel>
                         <TextBlock Text="Suchen nach IP, Name, Hersteller, Port oder Freigabe" Margin="9,0,0,0" VerticalAlignment="Center"
                                    Foreground="{DynamicResource MutedBrush}" IsHitTestVisible="False">
                             <TextBlock.Style>
@@ -191,11 +197,12 @@
                             <ItemsControl ItemsSource="{Binding MissingDevices}" ItemsPanel="{StaticResource WrapItems}" Focusable="False">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Background="{DynamicResource ChipBrush}" CornerRadius="4" Padding="7,2" Margin="0,4,4,0"
-                                                ToolTip="{Binding ToolTipText}">
+                                        <Button Style="{StaticResource MissingChip}" Command="{Binding WakeCommand}" IsEnabled="{Binding CanWake}"
+                                                ToolTip="{Binding ToolTipText}" ToolTipService.ShowOnDisabled="True"
+                                                AutomationProperties.Name="{Binding Text}">
                                             <TextBlock FontSize="12" Text="{Binding Text}" TextDecorations="Strikethrough"
                                                        Foreground="{DynamicResource MutedBrush}"/>
-                                        </Border>
+                                        </Button>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
@@ -320,6 +327,9 @@
                             <TextBlock Text="{Binding Name}" TextWrapping="Wrap" Margin="0,2,0,0"
                                        Visibility="{Binding Name, Converter={StaticResource NullToCollapsed}}"/>
                             <TextBlock Style="{StaticResource MutedText}" Text="{Binding Subtitle}" Margin="0,2,0,0"/>
+                            <TextBlock Style="{StaticResource MutedText}" Text="{Binding AnnouncedText}" Margin="0,2,0,0" TextWrapping="Wrap"
+                                       Visibility="{Binding AnnouncedText, Converter={StaticResource NullToCollapsed}}"
+                                       AutomationProperties.AutomationId="AnnouncedText"/>
 
                             <TextBlock Style="{StaticResource SectionTitle}" Text="Eigener Name"/>
                             <TextBox Text="{Binding CustomName, UpdateSourceTrigger=PropertyChanged}" MaxLength="60"
