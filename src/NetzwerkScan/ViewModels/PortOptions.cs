@@ -31,14 +31,16 @@ public sealed record PortGroupViewModel(string Name, IReadOnlyList<PortOptionVie
 
 public sealed class MissingDeviceViewModel
 {
-    public MissingDeviceViewModel(KnownDevice device)
+    public MissingDeviceViewModel(KnownDevice device, string customName = "")
     {
         Ip = Ipv4.ToText(device.Ip);
-        Name = device.Name;
+        Name = customName.Length > 0 ? customName : device.Name;
         Mac = device.Mac;
         Vendor = device.Vendor;
 
-        var label = device.Name.Length > 0 ? device.Name.Split('.')[0] : MacVendors.ShortName(device.Vendor);
+        var label = customName.Length > 0 ? customName
+            : device.Name.Length > 0 ? device.Name.Split('.')[0]
+            : MacVendors.ShortName(device.Vendor);
         Text = label.Length > 0 ? $"{Ip} · {label}" : Ip;
         ToolTipText = $"Zuletzt gesehen: {device.LastSeenUtc.ToLocalTime():dd.MM.yyyy HH:mm}";
     }

@@ -4,7 +4,7 @@ using NetzwerkScan.Core;
 
 namespace NetzwerkScan;
 
-/// <summary>What the settings window remembers between runs. Network adapter and range are chosen per scan.</summary>
+/// <summary>What is remembered between runs: the settings window and the last network chosen.</summary>
 public sealed class AppSettings
 {
     public const int DefaultTimeoutMs = 800;
@@ -20,6 +20,12 @@ public sealed class AppSettings
     public bool FindShares { get; set; } = true;
     public int TimeoutMs { get; set; } = DefaultTimeoutMs;
     public string SshUser { get; set; } = "";
+
+    /// <summary>Name of the network adapter last used. Empty when the range was entered by hand.</summary>
+    public string LastAdapter { get; set; } = "";
+
+    /// <summary>The range last entered by hand.</summary>
+    public string LastRange { get; set; } = "";
 
     public static AppSettings Load()
     {
@@ -65,6 +71,8 @@ public sealed class AppSettings
         if (settings.TimeoutMs is < MinTimeoutMs or > MaxTimeoutMs) settings.TimeoutMs = defaults.TimeoutMs;
         settings.Theme = ThemeManager.ParseMode(settings.Theme).ToString();
         if (settings.SshUser is null || !RemoteCommands.IsValidSshUser(settings.SshUser)) settings.SshUser = "";
+        settings.LastAdapter ??= "";
+        if (!IpRangeSet.TryParse(settings.LastRange, out _, out _)) settings.LastRange = "";
         return settings;
     }
 

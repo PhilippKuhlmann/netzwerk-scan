@@ -1,6 +1,7 @@
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Input;
 using Microsoft.Win32;
 using NetzwerkScan.Core;
 using NetzwerkScan.ViewModels;
@@ -18,6 +19,18 @@ public partial class MainWindow : Window
         DataContext = _viewModel;
         SourceInitialized += (_, _) => ThemeManager.ApplyTitleBar(this);
         Loaded += async (_, _) => await UpdateIfAvailableAsync();
+        Closing += (_, _) =>
+        {
+            _viewModel.SaveSettings();
+            _viewModel.SaveCustomNames();
+        };
+    }
+
+    private void CustomName_LostFocus(object sender, RoutedEventArgs e) => _viewModel.SaveCustomNames();
+
+    private void CustomName_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter) _viewModel.SaveCustomNames();
     }
 
     /// <summary>Runs after the window is up, so that a slow or missing connection doesn't delay the start.</summary>

@@ -29,9 +29,29 @@ public sealed class DeviceInventory
     public List<KnownDevice> Devices { get; set; } = new();
     public List<ScannedRange> Ranges { get; set; } = new();
 
+    /// <summary>Names given by the user, by device key. Kept for as long as the user wants them, unlike the scan history.</summary>
+    public Dictionary<string, string> CustomNames { get; set; } = new();
+
     public static string KeyFor(string mac, uint ip) => NeighborTable.IsRealMac(mac) ? mac : "ip:" + Ipv4.ToText(ip);
 
-    public ScanComparison Compare(IpRange range, IReadOnlyCollection<SeenDevice> seen)
+    /// <summary>A name given while the MAC address was not known is still found once it is.</summary>
+    public string CustomNameFor(string mac, uint ip) =>
+        NeighborTable.IsRealMac(mac) && CustomNames.TryGetValue(mac, out var name)
+            ? name
+            : CustomNames.GetValueOrDefault(IpKey(ip), "");
+
+    public void SetCustomName(string mac, uint ip, string name)
+    {
+        CustomNames.Remove(IpKey(ip));
+
+        name = name.Trim();
+        if (name.Length == 0) CustomNames.Remove(KeyFor(mac, ip));
+        else CustomNames[KeyFor(mac, ip)] = name;
+    }
+
+    private static string IpKey(uint ip) => "ip:" + Ipv4.ToText(ip);
+
+    public ScanComparison Compare(IpRangeSet range, IReadOnlyCollection<SeenDevice> seen)
     {
         var keys = Devices.Select(d => d.Key).ToHashSet();
         var ips = Devices.Select(d => d.Ip).ToHashSet();
@@ -60,12 +80,12 @@ public sealed class DeviceInventory
             .OrderBy(d => d.Ip)
             .ToList();
 
-        var hadHistory = Ranges.Any(r => r.First <= range.Last && r.Last >= range.First);
+        var hadHistory = Ranges.Any(r => range.Ranges.Any(scanned => r.First <= scanned.Last && r.Last >= scanned.First));
         return new ScanComparison(newIps, missing, hadHistory);
     }
 
     /// <summary>Stores the result of a completed scan. An interrupted scan proves nothing about absent devices.</summary>
-    public void Record(IpRange range, IEnumerable<SeenDevice> seen, DateTime nowUtc)
+    public void Record(IpRangeSet range, IEnumerable<SeenDevice> seen, DateTime nowUtc)
     {
         var byKey = Devices.ToDictionary(d => d.Key);
         foreach (var device in seen)
@@ -84,8 +104,8 @@ public sealed class DeviceInventory
 
         Devices = byKey.Values.Where(d => nowUtc - d.LastSeenUtc < ForgetAfter).OrderBy(d => d.Ip).ToList();
         // Forgotten together: a range kept without its devices would make them all look new on return.
-        Ranges.RemoveAll(r => (r.First == range.First && r.Last == range.Last) || nowUtc - r.LastScanUtc >= ForgetAfter);
-        Ranges.Add(new ScannedRange(range.First, range.Last, nowUtc));
+        Ranges.RemoveAll(r => range.Ranges.Any(scanned => r.First == scanned.First && r.Last == scanned.Last) || nowUtc - r.LastScanUtc >= ForgetAfter);
+        Ranges.AddRange(range.Ranges.Select(scanned => new ScannedRange(scanned.First, scanned.Last, nowUtc)));
     }
 
     private bool WasScannedBefore(uint ip) => Ranges.Any(r => ip >= r.First && ip <= r.Last);
@@ -144,6 +164,9 @@ public sealed class DeviceInventory
             .Select(d => d with { Mac = d.Mac ?? "", Name = d.Name ?? "", Vendor = d.Vendor ?? "" })
             .ToList();
         inventory.Ranges = (inventory.Ranges ?? new()).Where(r => r is not null).ToList();
+        inventory.CustomNames = (inventory.CustomNames ?? new())
+            .Where(n => !string.IsNullOrWhiteSpace(n.Value))
+            .ToDictionary(n => n.Key, n => n.Value.Trim());
         return inventory;
     }
 

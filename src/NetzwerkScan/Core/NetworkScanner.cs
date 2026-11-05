@@ -5,7 +5,7 @@ using System.Net.Sockets;
 
 namespace NetzwerkScan.Core;
 
-public sealed record ScanOptions(IpRange Range, int[] Ports, bool FindShares, int TimeoutMs);
+public sealed record ScanOptions(IpRangeSet Range, int[] Ports, bool FindShares, int TimeoutMs);
 
 public abstract record ScanEvent(uint Ip);
 public sealed record HostFoundEvent(uint Ip, long? PingMs, bool IsThisPc) : ScanEvent(Ip);
@@ -153,7 +153,7 @@ public sealed class NetworkScanner
     /// A stale entry only proves the device existed at some point, and Windows needs a few seconds to
     /// re-verify it, so only entries confirmed as reachable count.
     /// </summary>
-    private async Task CollectFromArpTableAsync(IpRange range, HashSet<uint> localIps, IProgress<ScanEvent> events, CancellationToken ct)
+    private async Task CollectFromArpTableAsync(IpRangeSet range, HashSet<uint> localIps, IProgress<ScanEvent> events, CancellationToken ct)
     {
         var deadline = Environment.TickCount64 + NeighborSettleMs;
         while (true)

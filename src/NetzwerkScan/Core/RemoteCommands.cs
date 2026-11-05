@@ -13,8 +13,12 @@ public static partial class RemoteCommands
 {
     public const int SshPort = 22;
     public const int RdpPort = 3389;
+    public const string DefaultSshUser = "root";
 
     public static bool IsValidSshUser(string user) => SshUser().IsMatch(user);
+
+    /// <summary>What a click on port 22 logs in with. Nothing usable entered means the default.</summary>
+    public static string SshUserOrDefault(string user) => IsValidSshUser(user) ? user : DefaultSshUser;
 
     public static string SshTarget(string ip, string user) => IsValidSshUser(user) ? $"{user}@{ip}" : ip;
 

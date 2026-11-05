@@ -9,11 +9,14 @@ namespace NetzwerkScan.Core;
 
 public sealed record WebInfo(string Scheme, string? Title, string? Server);
 
+public sealed record RedirectTarget(bool UseTls, int Port, string Path);
+
 /// <summary>Finds out whether an open port serves a website, and whether over HTTP or HTTPS.</summary>
 public static partial class WebProbe
 {
     private const int AttemptTimeoutMs = 2500;
     private const int MaxResponseBytes = 64 * 1024;
+    private const int MaxRedirects = 3;
     private static readonly byte[] TitleEnd = Encoding.ASCII.GetBytes("</title>");
 
     public static async Task<WebInfo?> ProbeAsync(IPAddress address, int port, CancellationToken ct)
@@ -25,6 +28,52 @@ public static partial class WebProbe
     }
 
     private static async Task<WebInfo?> AttemptAsync(IPAddress address, int port, bool useTls, CancellationToken ct)
+    {
+        var response = await FetchAsync(address, port, useTls, "/", ct);
+        if (response is null || ParseResponse(response, useTls ? "https" : "http") is not { } info) return null;
+
+        return RedirectLocation(response) is { } location
+            ? await FollowRedirectsAsync(info, location, address, port, useTls, ct)
+            : info;
+    }
+
+    /// <summary>Only the title comes from where the redirect leads. The port being probed stays the one to open.</summary>
+    private static async Task<WebInfo> FollowRedirectsAsync(WebInfo first, string location, IPAddress address, int port, bool useTls, CancellationToken ct)
+    {
+        var path = "/";
+        for (var hop = 0; hop < MaxRedirects; hop++)
+        {
+            if (ResolveRedirect(location, address, port, useTls, path) is not { } target) break;
+            (useTls, port, path) = (target.UseTls, target.Port, target.Path);
+
+            var response = await FetchAsync(address, port, useTls, path, ct);
+            if (response is null || ParseResponse(response, first.Scheme) is not { } page) break;
+
+            if (RedirectLocation(response) is { } next)
+            {
+                location = next;
+                continue;
+            }
+            return first with { Title = page.Title, Server = first.Server ?? page.Server };
+        }
+        return first;
+    }
+
+    /// <summary>
+    /// Where a redirect leads, as long as that is the same device. Everything else is left alone: a scan of
+    /// the local network should not start talking to other machines because a device on it says so.
+    /// </summary>
+    public static RedirectTarget? ResolveRedirect(string location, IPAddress address, int port, bool useTls, string path = "/")
+    {
+        var current = new Uri($"{(useTls ? "https" : "http")}://{address}:{port}{path}");
+        if (!Uri.TryCreate(current, location, out var target)) return null;
+        if (target.Scheme != Uri.UriSchemeHttp && target.Scheme != Uri.UriSchemeHttps) return null;
+        if (target.Host != address.ToString() || !ServiceCatalog.MayProbeWeb(target.Port)) return null;
+
+        return new RedirectTarget(target.Scheme == Uri.UriSchemeHttps, target.Port, target.PathAndQuery);
+    }
+
+    private static async Task<string?> FetchAsync(IPAddress address, int port, bool useTls, string path, CancellationToken ct)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(AttemptTimeoutMs);
@@ -50,12 +99,11 @@ public static partial class WebProbe
 
             await using (stream)
             {
-                var request = $"GET / HTTP/1.1\r\nHost: {address}:{port}\r\nUser-Agent: NetzwerkScan/1.0\r\n" +
+                var request = $"GET {path} HTTP/1.1\r\nHost: {address}:{port}\r\nUser-Agent: NetzwerkScan/1.0\r\n" +
                               "Accept: text/html,*/*\r\nConnection: close\r\n\r\n";
                 await stream.WriteAsync(Encoding.ASCII.GetBytes(request), timeout.Token);
 
-                var response = await ReadResponseAsync(stream, timeout.Token);
-                return ParseResponse(response, useTls ? "https" : "http");
+                return await ReadResponseAsync(stream, timeout.Token);
             }
         }
         catch (Exception e) when (e is SocketException or IOException or System.Security.Authentication.AuthenticationException
@@ -91,10 +139,12 @@ public static partial class WebProbe
     {
         if (!response.StartsWith("HTTP/", StringComparison.Ordinal)) return null;
 
-        var server = ServerHeader().Match(response) is { Success: true } s ? s.Groups[1].Value.Trim() : null;
+        var headers = HeadersOf(response);
+        var server = ServerHeader().Match(headers) is { Success: true } s ? s.Groups[1].Value.Trim() : null;
 
+        // The page of a redirect only says "301 Moved Permanently", which tells nothing about the device.
         string? title = null;
-        if (TitleTag().Match(response) is { Success: true } t)
+        if (!RedirectStatus().IsMatch(headers) && TitleTag().Match(response) is { Success: true } t)
         {
             title = Whitespace().Replace(WebUtility.HtmlDecode(t.Groups[1].Value), " ").Trim();
             if (title.Length > 100) title = title[..100] + "…";
@@ -102,6 +152,28 @@ public static partial class WebProbe
         }
         return new WebInfo(scheme, title, string.IsNullOrEmpty(server) ? null : server);
     }
+
+    /// <summary>The target of a redirect response, otherwise null.</summary>
+    public static string? RedirectLocation(string response)
+    {
+        var headers = HeadersOf(response);
+        if (!RedirectStatus().IsMatch(headers)) return null;
+
+        var location = LocationHeader().Match(headers) is { Success: true } l ? l.Groups[1].Value.Trim() : "";
+        return location.Length > 0 ? location : null;
+    }
+
+    private static string HeadersOf(string response)
+    {
+        var end = response.IndexOf("\r\n\r\n", StringComparison.Ordinal);
+        return end >= 0 ? response[..end] : response;
+    }
+
+    [GeneratedRegex(@"\AHTTP/\d(?:\.\d)? 30[12378]\b")]
+    private static partial Regex RedirectStatus();
+
+    [GeneratedRegex(@"^Location:[ \t]*(.+?)\r?$", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
+    private static partial Regex LocationHeader();
 
     [GeneratedRegex(@"^Server:[ \t]*(.+?)\r?$", RegexOptions.Multiline | RegexOptions.IgnoreCase)]
     private static partial Regex ServerHeader();

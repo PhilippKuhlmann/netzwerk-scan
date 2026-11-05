@@ -133,3 +133,72 @@ public readonly record struct IpRange(uint First, uint Last)
     public override string ToString() =>
         First == Last ? Ipv4.ToText(First) : $"{Ipv4.ToText(First)} – {Ipv4.ToText(Last)}";
 }
+
+/// <summary>One or more ranges without overlaps, so that no address is scanned or counted twice.</summary>
+public sealed class IpRangeSet
+{
+    public IpRangeSet(IEnumerable<IpRange> ranges)
+    {
+        var merged = new List<IpRange>();
+        foreach (var range in ranges.OrderBy(r => r.First))
+        {
+            // As long: the last range can end at 255.255.255.255, where adding 1 would wrap around.
+            if (merged.Count > 0 && range.First <= (long)merged[^1].Last + 1)
+            {
+                merged[^1] = merged[^1] with { Last = Math.Max(merged[^1].Last, range.Last) };
+            }
+            else
+            {
+                merged.Add(range);
+            }
+        }
+        Ranges = merged;
+    }
+
+    public IReadOnlyList<IpRange> Ranges { get; }
+
+    public long Count => Ranges.Sum(r => r.Count);
+
+    public bool Contains(uint ip) => Ranges.Any(r => r.Contains(ip));
+
+    public IEnumerable<uint> Addresses() => Ranges.SelectMany(r => r.Addresses());
+
+    public static implicit operator IpRangeSet(IpRange range) => new(new[] { range });
+
+    /// <summary>Accepts what IpRange.TryParse accepts, several separated by a comma or semicolon.</summary>
+    public static bool TryParse(string? text, out IpRangeSet set, out string error)
+    {
+        set = null!;
+        var parts = (text ?? "").Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (parts.Length <= 1)
+        {
+            if (!IpRange.TryParse(parts.FirstOrDefault(), out var single, out error)) return false;
+            set = single;
+            return true;
+        }
+
+        var ranges = new List<IpRange>();
+        foreach (var part in parts)
+        {
+            if (!IpRange.TryParse(part, out var range, out error))
+            {
+                error = $"{part}: {error}";
+                return false;
+            }
+            ranges.Add(range);
+        }
+
+        var result = new IpRangeSet(ranges);
+        if (result.Count > IpRange.MaxAddresses)
+        {
+            error = $"Bereiche zusammen zu groß ({result.Count:N0} Adressen). Maximal {IpRange.MaxAddresses:N0}.";
+            return false;
+        }
+
+        error = "";
+        set = result;
+        return true;
+    }
+
+    public override string ToString() => string.Join(", ", Ranges);
+}

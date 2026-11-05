@@ -134,11 +134,14 @@ public sealed class HostViewModel : ObservableObject
     private bool _needsLogin;
     private bool _isScanning = true;
     private bool _isNew;
+    private string _customName = "";
     private readonly Func<string> _sshUser;
+    private readonly Action<HostViewModel>? _customNameChanged;
 
-    public HostViewModel(uint ip, long? pingMs, bool isThisPc, Func<string> sshUser)
+    public HostViewModel(uint ip, long? pingMs, bool isThisPc, Func<string> sshUser, Action<HostViewModel>? customNameChanged = null)
     {
         _sshUser = sshUser;
+        _customNameChanged = customNameChanged;
         IpKey = ip;
         Ip = Ipv4.ToText(ip);
         IsThisPc = isThisPc;
@@ -159,8 +162,37 @@ public sealed class HostViewModel : ObservableObject
 
     public string Name { get => _name; set { if (Set(ref _name, value)) Raise(nameof(DisplayName)); } }
 
-    /// <summary>Host name without the domain, which would only repeat in every row. The details show the full name.</summary>
-    public string DisplayName => _name.Length > 0 ? _name.Split('.')[0] : IsThisPc ? "Dieser PC" : "";
+    /// <summary>The name the user gave this device. Typed into directly, so it can have a trailing space for a moment.</summary>
+    public string CustomName
+    {
+        get => _customName;
+        set
+        {
+            if (!Set(ref _customName, value)) return;
+            Raise(nameof(DisplayName));
+            _customNameChanged?.Invoke(this);
+        }
+    }
+
+    public void LoadCustomName(string name)
+    {
+        if (Set(ref _customName, name, nameof(CustomName))) Raise(nameof(DisplayName));
+    }
+
+    /// <summary>
+    /// The user's own name, otherwise the host name without the domain, which would only repeat in every row.
+    /// The details show the full name.
+    /// </summary>
+    public string DisplayName =>
+        _customName.Trim() is { Length: > 0 } custom ? custom
+        : _name.Length > 0 ? _name.Split('.')[0]
+        : IsThisPc ? "Dieser PC"
+        : "";
+
+    public string ExportName =>
+        _customName.Trim() is { Length: > 0 } custom ? custom
+        : _name.Length > 0 ? _name
+        : DisplayName;
 
     public string Workgroup { get => _workgroup; set { if (Set(ref _workgroup, value)) Raise(nameof(Subtitle)); } }
     public string Mac { get => _mac; set { if (Set(ref _mac, value)) Raise(nameof(Subtitle)); } }
@@ -239,6 +271,7 @@ public sealed class HostViewModel : ObservableObject
         (_isNew && search.Equals("neu", StringComparison.OrdinalIgnoreCase))
         || Ip.Contains(search, StringComparison.OrdinalIgnoreCase)
         || _name.Contains(search, StringComparison.OrdinalIgnoreCase)
+        || _customName.Contains(search, StringComparison.OrdinalIgnoreCase)
         || _mac.Contains(search, StringComparison.OrdinalIgnoreCase)
         || _vendor.Contains(search, StringComparison.OrdinalIgnoreCase)
         || Ports.Any(p => p.ChipText.Contains(search, StringComparison.OrdinalIgnoreCase)

@@ -359,6 +359,16 @@ public class SettingsSshUserTests
 
     [Fact]
     public void GoodUserSurvives() => Assert.Equal("root", AppSettings.Parse(new AppSettings { SshUser = "root" }.ToJson()).SshUser);
+
+    [Theory]
+    [InlineData("", "root")]
+    [InlineData("-oProxyCommand=calc", "root")]
+    [InlineData("admin", "admin")]
+    public void ClickOnPort22UsesRootUnlessAnotherUserIsSet(string entered, string expected)
+    {
+        Assert.Equal(expected, RemoteCommands.SshUserOrDefault(entered));
+        Assert.Equal($"{expected}@192.0.2.1", RemoteCommands.Ssh("192.0.2.1", RemoteCommands.SshUserOrDefault(entered)).ArgumentList[^1]);
+    }
 }
 
 public class AppUpdaterTests

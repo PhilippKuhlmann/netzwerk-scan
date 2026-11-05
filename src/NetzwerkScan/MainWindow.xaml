@@ -36,8 +36,8 @@
                           AutomationProperties.Name="Netzwerkkarte"/>
 
                 <TextBlock Grid.Column="2" Style="{StaticResource FieldLabel}" Text="Bereich" Margin="16,0,8,0"/>
-                <TextBox Grid.Column="3" Width="210" Text="{Binding RangeText, UpdateSourceTrigger=PropertyChanged}"
-                         ToolTip="Zum Beispiel 192.168.1.0/24, 192.168.1.10-50 oder 192.168.1.10"
+                <TextBox Grid.Column="3" Width="260" Text="{Binding RangeText, UpdateSourceTrigger=PropertyChanged}"
+                         ToolTip="Zum Beispiel 192.168.1.0/24, 192.168.1.10-50 oder 192.168.1.10. Mehrere mit Komma trennen."
                          AutomationProperties.Name="Bereich"/>
 
                 <Button Grid.Column="4" Grid.RowSpan="2" Margin="16,0,0,0" Style="{StaticResource SecondaryButton}"
@@ -320,6 +320,12 @@
                             <TextBlock Text="{Binding Name}" TextWrapping="Wrap" Margin="0,2,0,0"
                                        Visibility="{Binding Name, Converter={StaticResource NullToCollapsed}}"/>
                             <TextBlock Style="{StaticResource MutedText}" Text="{Binding Subtitle}" Margin="0,2,0,0"/>
+
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="Eigener Name"/>
+                            <TextBox Text="{Binding CustomName, UpdateSourceTrigger=PropertyChanged}" MaxLength="60"
+                                     LostKeyboardFocus="CustomName_LostFocus" KeyDown="CustomName_KeyDown"
+                                     ToolTip="Wird in der Liste angezeigt und bleibt auf diesem PC gespeichert."
+                                     AutomationProperties.Name="Eigener Name" AutomationProperties.AutomationId="CustomName"/>
 
                             <TextBlock Style="{StaticResource SectionTitle}" Text="Weboberflächen"/>
                             <TextBlock Style="{StaticResource MutedText}" Text="Keine gefunden."

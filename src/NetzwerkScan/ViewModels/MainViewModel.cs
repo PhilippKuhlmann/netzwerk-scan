@@ -66,6 +66,7 @@ public sealed class MainViewModel : ObservableObject
     private readonly DeviceInventory _inventory = DeviceInventory.Load();
     private string _sshUser = "";
     private string _changeSummary = "";
+    private bool _customNamesChanged;
 
     public MainViewModel(AppSettings settings)
     {
@@ -101,7 +102,15 @@ public sealed class MainViewModel : ObservableObject
         TimeoutText = settings.TimeoutMs.ToString();
         var (listedPorts, extraPorts) = PortCatalog.Split(settings.Ports);
         ApplyPorts(listedPorts, extraPorts);
-        SelectedAdapter = Adapters[0];
+        RestoreNetwork(settings);
+    }
+
+    private void RestoreNetwork(AppSettings settings)
+    {
+        var adapter = Adapters.FirstOrDefault(o => o.Adapter is not null && o.Adapter.Name == settings.LastAdapter);
+        if (adapter is not null) SelectedAdapter = adapter;
+        else if (settings.LastAdapter.Length == 0 && settings.LastRange.Length > 0) RangeText = settings.LastRange;
+        else SelectedAdapter = Adapters[0]; // nothing remembered, or that adapter is gone
     }
 
     public ObservableCollection<AdapterOption> Adapters { get; }
@@ -134,7 +143,7 @@ public sealed class MainViewModel : ObservableObject
         var rows = Hosts.OrderBy(h => h.IpKey).Select(h => new CsvRow(
             h.IsNew ? "Neu" : "Bekannt",
             h.Ip,
-            h.Name.Length > 0 ? h.Name : h.DisplayName,
+            h.ExportName,
             h.Mac,
             h.Vendor,
             h.PingText,
@@ -196,8 +205,10 @@ public sealed class MainViewModel : ObservableObject
         {
             if (!Set(ref _rangeText, value)) return;
 
-            RangeHasError = !IpRange.TryParse(value, out var range, out var error);
-            RangeInfo = RangeHasError ? error : $"{range.Count:N0} Adressen: {range}";
+            RangeHasError = !IpRangeSet.TryParse(value, out var range, out var error);
+            RangeInfo = RangeHasError ? error
+                : range.Ranges.Count > 1 ? $"{range.Count:N0} Adressen in {range.Ranges.Count} Bereichen"
+                : $"{range.Count:N0} Adressen: {range}";
 
             if (!_settingRange) SelectedAdapter = Adapters[^1]; // typing a range means it is now a manual one
         }
@@ -314,7 +325,22 @@ public sealed class MainViewModel : ObservableObject
         if (!_portsHaveError) _settings.Ports = _portsText;
         if (TryParseTimeout(_timeoutText, out var timeout)) _settings.TimeoutMs = timeout;
         if (!SshUserHasError) _settings.SshUser = _sshUser;
+        _settings.LastAdapter = _selectedAdapter?.Adapter?.Name ?? "";
+        if (_selectedAdapter?.Adapter is null && !_rangeHasError) _settings.LastRange = _rangeText.Trim();
         _settings.Save();
+    }
+
+    private void OnCustomNameChanged(HostViewModel host)
+    {
+        _inventory.SetCustomName(host.Mac, host.IpKey, host.CustomName);
+        _customNamesChanged = true;
+    }
+
+    public void SaveCustomNames()
+    {
+        if (!_customNamesChanged) return;
+        _customNamesChanged = false;
+        _inventory.Save();
     }
 
     public string Search
@@ -375,6 +401,7 @@ public sealed class MainViewModel : ObservableObject
             return;
         }
 
+        SaveSettings();
         Hosts.Clear();
         _hostsByIp.Clear();
         MissingDevices.Clear();
@@ -430,7 +457,7 @@ public sealed class MainViewModel : ObservableObject
         StatusText = outcome;
     }
 
-    private void CompareWithEarlierScans(IpRange range, bool completed)
+    private void CompareWithEarlierScans(IpRangeSet range, bool completed)
     {
         var seen = Hosts.Select(h => new SeenDevice(h.IpKey, h.Mac, h.Name, h.Vendor)).ToList();
         var comparison = _inventory.Compare(range, seen);
@@ -440,7 +467,7 @@ public sealed class MainViewModel : ObservableObject
         if (completed)
         {
             // Only a finished scan can tell that a device is really gone.
-            foreach (var device in comparison.Missing) MissingDevices.Add(new MissingDeviceViewModel(device));
+            foreach (var device in comparison.Missing) MissingDevices.Add(new MissingDeviceViewModel(device, _inventory.CustomNameFor(device.Mac, device.Ip)));
             _inventory.Record(range, seen, DateTime.UtcNow);
             _inventory.Save();
         }
@@ -463,7 +490,7 @@ public sealed class MainViewModel : ObservableObject
     private bool TryBuildOptions(out ScanOptions options, out string error)
     {
         options = null!;
-        if (!IpRange.TryParse(RangeText, out var range, out error)) return false;
+        if (!IpRangeSet.TryParse(RangeText, out var range, out error)) return false;
 
         var ports = Array.Empty<int>();
         if (ScanPorts && !PortList.TryParse(PortsText, out ports, out error))
@@ -486,7 +513,8 @@ public sealed class MainViewModel : ObservableObject
     {
         if (e is HostFoundEvent found)
         {
-            var created = new HostViewModel(found.Ip, found.PingMs, found.IsThisPc, () => SshUserHasError ? "" : _sshUser);
+            var created = new HostViewModel(found.Ip, found.PingMs, found.IsThisPc, () => RemoteCommands.SshUserOrDefault(_sshUser), OnCustomNameChanged);
+            created.LoadCustomName(_inventory.CustomNameFor("", found.Ip));
             _hostsByIp[found.Ip] = created;
             Hosts.Add(created);
             Raise(nameof(ShowEmptyHint));
@@ -501,6 +529,7 @@ public sealed class MainViewModel : ObservableObject
             case HostMacEvent mac:
                 host.Mac = mac.Mac;
                 host.Vendor = MacVendors.Lookup(mac.Mac);
+                host.LoadCustomName(_inventory.CustomNameFor(mac.Mac, host.IpKey));
                 break;
             case HostNameEvent name:
                 if (name.Name is not null) host.Name = name.Name;
